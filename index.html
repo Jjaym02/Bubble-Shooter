@@ -117,15 +117,28 @@
     <div class="game-container">
         <div class="header">
             <h1>🎯 Bubble Shooter</h1>
-            <div class="score">Score: <span id="score">0</span></div>
+            <div class="score">Time: <span id="score">0:00</span></div>
         </div>
         
         <div class="canvas-container">
             <canvas id="gameCanvas" width="400" height="520"></canvas>
+            <div id="nameInputOverlay" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 10px;">
+                <h2 style="color: #FFD700; margin-bottom: 20px; font-size: 32px;">🎯 Bubble Shooter</h2>
+                <p style="color: white; margin-bottom: 20px; font-size: 16px;">Enter your name to start:</p>
+                <input type="text" id="playerNameInput" placeholder="Your Name" maxlength="20" style="padding: 12px 20px; font-size: 18px; border: 2px solid #667eea; border-radius: 8px; width: 250px; text-align: center; margin-bottom: 20px;">
+                <button onclick="startWithName()" style="padding: 12px 40px; font-size: 18px; background: #667eea; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">▶ START GAME</button>
+                <p style="color: #aaa; margin-top: 15px; font-size: 14px;">Clear all bubbles as fast as you can!</p>
+            </div>
         </div>
         
         <div class="controls">
             <button onclick="resetGame()">🔄 New Game</button>
+            <button onclick="toggleLeaderboard()" style="margin-left: 10px;">🏆 Leaderboard</button>
+        </div>
+        
+        <div id="leaderboard" style="display: none; margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 10px;">
+            <h3 style="margin: 0 0 10px 0; color: #333; text-align: center;">🏆 Fastest Times</h3>
+            <div id="leaderboardList" style="font-size: 14px; color: #666;"></div>
         </div>
         
         <div class="instructions">
@@ -159,6 +172,14 @@
         let shotCount = 0;
         const SHOTS_PER_NEW_ROW = 5; // Add new row every 5 shots
         let fallingBubbles = []; // Array to track bubbles that are falling
+        let startTime = null;
+        let elapsedTime = 0;
+        let timerInterval = null;
+        let gameStarted = false;
+        let nameEntered = false; // Track if name was already entered
+        let playerName = ''; // Store player name
+        let rowAnimationOffset = 0; // Animation offset for sliding rows
+        let isAnimatingRows = false; // Track if rows are sliding
         
         function getAvailableColors() {
             const colorsOnBoard = new Set();
@@ -188,6 +209,75 @@
             return availableColors[Math.floor(Math.random() * availableColors.length)];
         }
         
+        function formatTime(seconds) {
+            const mins = Math.floor(seconds / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${mins}:${secs.toString().padStart(2, '0')}`;
+        }
+        
+        function updateTimer() {
+            if (startTime && !gameWon && !gameLost) {
+                elapsedTime = (Date.now() - startTime) / 1000;
+                scoreDisplay.textContent = formatTime(elapsedTime);
+            }
+        }
+        
+        function startTimer() {
+            startTime = Date.now();
+            timerInterval = setInterval(updateTimer, 100);
+        }
+        
+        function stopTimer() {
+            if (timerInterval) {
+                clearInterval(timerInterval);
+                timerInterval = null;
+            }
+        }
+        
+        function getLeaderboard() {
+            const saved = localStorage.getItem('bubbleShooterLeaderboard');
+            return saved ? JSON.parse(saved) : [];
+        }
+        
+        function saveToLeaderboard(name, time) {
+            const leaderboard = getLeaderboard();
+            leaderboard.push({ name, time });
+            leaderboard.sort((a, b) => a.time - b.time);
+            leaderboard.splice(10); // Keep only top 10
+            localStorage.setItem('bubbleShooterLeaderboard', JSON.stringify(leaderboard));
+        }
+        
+        function displayLeaderboard() {
+            const leaderboard = getLeaderboard();
+            const listDiv = document.getElementById('leaderboardList');
+            
+            if (leaderboard.length === 0) {
+                listDiv.innerHTML = '<p style="text-align: center; color: #999;">No records yet. Be the first!</p>';
+            } else {
+                listDiv.innerHTML = leaderboard.map((entry, index) => 
+                    `<div style="padding: 8px; margin: 5px 0; background: white; border-radius: 5px; display: flex; justify-content: space-between;">
+                        <span><strong>${index + 1}.</strong> ${entry.name}</span>
+                        <span style="color: #667eea; font-weight: bold;">${formatTime(entry.time)}</span>
+                    </div>`
+                ).join('');
+            }
+        }
+        
+        function toggleLeaderboard() {
+            const leaderboardDiv = document.getElementById('leaderboard');
+            if (leaderboardDiv.style.display === 'none') {
+                displayLeaderboard();
+                leaderboardDiv.style.display = 'block';
+            } else {
+                leaderboardDiv.style.display = 'none';
+            }
+        }
+        
+        function promptForName() {
+            const name = prompt('🎉 Congratulations! Enter your name for the leaderboard:', 'Player');
+            return name && name.trim() ? name.trim() : 'Anonymous';
+        }
+        
         function initGame() {
             grid = Array(ROWS).fill(null).map(() => Array(COLS).fill(null));
             
@@ -205,12 +295,45 @@
             currentBubble = { color: getRandomBubbleColor() };
             nextBubble = { color: getRandomBubbleColor() };
             score = 0;
-            scoreDisplay.textContent = score;
+            elapsedTime = 0;
+            scoreDisplay.textContent = '0:00';
             shootingBubble = null;
             gameWon = false;
             gameLost = false;
             shotCount = 0;
             fallingBubbles = [];
+            gameStarted = false;
+            nameEntered = false;
+            playerName = '';
+            rowAnimationOffset = 0;
+            isAnimatingRows = false;
+            stopTimer();
+            
+            // Show name input overlay
+            document.getElementById('nameInputOverlay').style.display = 'flex';
+            document.getElementById('playerNameInput').value = '';
+            document.getElementById('playerNameInput').focus();
+        }
+        
+        function startGame() {
+            gameStarted = true;
+            startTimer();
+        }
+        
+        function startWithName() {
+            const nameInput = document.getElementById('playerNameInput');
+            playerName = nameInput.value.trim();
+            
+            if (!playerName) {
+                alert('Please enter your name!');
+                return;
+            }
+            
+            // Hide name input overlay
+            document.getElementById('nameInputOverlay').style.display = 'none';
+            
+            // Start the game
+            startGame();
         }
         
         function drawBubble(x, y, color) {
@@ -235,7 +358,7 @@
             const offsetX = row % 2 === 1 ? BUBBLE_SPACING / 2 : 0;
             return {
                 x: col * BUBBLE_SPACING + BUBBLE_RADIUS + 30 + offsetX,
-                y: row * BUBBLE_SPACING + BUBBLE_RADIUS + 30
+                y: row * BUBBLE_SPACING + BUBBLE_RADIUS + 30 + rowAnimationOffset
             };
         }
         
@@ -269,18 +392,18 @@
                 if (col === COLS - 1) {
                     grid[0][col] = null;
                 } else {
-                    // 80% chance to place a bubble (some gaps for variety)
-                    if (Math.random() < 0.8) {
-                        grid[0][col] = {
-                            color: colorsToUse[Math.floor(Math.random() * colorsToUse.length)],
-                            row: 0,
-                            col
-                        };
-                    } else {
-                        grid[0][col] = null;
-                    }
+                    // Always place a bubble for full row
+                    grid[0][col] = {
+                        color: colorsToUse[Math.floor(Math.random() * colorsToUse.length)],
+                        row: 0,
+                        col
+                    };
                 }
             }
+            
+            // Start row slide animation
+            isAnimatingRows = true;
+            rowAnimationOffset = -BUBBLE_SPACING;
         }
         
         function checkWinCondition() {
@@ -330,6 +453,12 @@
                 drawBubble(shootingBubble.x, shootingBubble.y, shootingBubble.color);
             }
             
+            // Draw start screen if game hasn't started
+            if (!gameStarted) {
+                // Game is waiting for name input - don't draw start screen overlay
+                return;
+            }
+            
             // Draw victory screen if game is won
             if (gameWon) {
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.8)';
@@ -339,14 +468,35 @@
                 ctx.fillStyle = '#FFD700';
                 ctx.font = 'bold 48px Arial';
                 ctx.textAlign = 'center';
-                ctx.fillText('🎉 YOU WIN! 🎉', canvas.width / 2, canvas.height / 2 - 40);
+                ctx.fillText('🎉 YOU WIN! 🎉', canvas.width / 2, canvas.height / 2 - 60);
                 
                 ctx.fillStyle = '#ffffff';
-                ctx.font = '24px Arial';
-                ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 20);
+                ctx.font = '20px Arial';
+                ctx.fillText(playerName, canvas.width / 2, canvas.height / 2 - 20);
                 
-                ctx.font = '18px Arial';
-                ctx.fillText('Click "New Game" to play again', canvas.width / 2, canvas.height / 2 + 60);
+                ctx.font = '24px Arial';
+                ctx.fillText(`Time: ${formatTime(elapsedTime)}`, canvas.width / 2, canvas.height / 2 + 15);
+                
+                // Show save prompt
+                if (!nameEntered) {
+                    ctx.font = '16px Arial';
+                    ctx.fillText('Click below to save your time!', canvas.width / 2, canvas.height / 2 + 50);
+                    
+                    // Draw save button
+                    ctx.fillStyle = '#667eea';
+                    ctx.fillRect(canvas.width / 2 - 100, canvas.height / 2 + 70, 200, 45);
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(canvas.width / 2 - 100, canvas.height / 2 + 70, 200, 45);
+                    
+                    ctx.fillStyle = '#ffffff';
+                    ctx.font = 'bold 18px Arial';
+                    ctx.fillText('💾 Save to Leaderboard', canvas.width / 2, canvas.height / 2 + 98);
+                } else {
+                    ctx.font = '18px Arial';
+                    ctx.fillText('✅ Score saved to leaderboard!', canvas.width / 2, canvas.height / 2 + 60);
+                    ctx.fillText('Click "New Game" to play again', canvas.width / 2, canvas.height / 2 + 90);
+                }
                 
                 ctx.textAlign = 'left';
                 return; // Don't draw shooter when game is won
@@ -365,7 +515,7 @@
                 
                 ctx.fillStyle = '#ffffff';
                 ctx.font = '24px Arial';
-                ctx.fillText(`Final Score: ${score}`, canvas.width / 2, canvas.height / 2 + 20);
+                ctx.fillText(`Time: ${formatTime(elapsedTime)}`, canvas.width / 2, canvas.height / 2 + 20);
                 
                 ctx.font = '18px Arial';
                 ctx.fillText('Bubbles reached the bottom!', canvas.width / 2, canvas.height / 2 + 50);
@@ -568,11 +718,6 @@
                 }
             }
             
-            if (removed > 0) {
-                score += removed * 15;
-                scoreDisplay.textContent = score;
-            }
-            
             // Update shooter bubbles if their colors are no longer available
             updateShooterBubbles();
         }
@@ -591,13 +736,15 @@
             }
             
             // Check win condition
-            if (checkWinCondition()) {
+            if (checkWinCondition() && !gameWon) {
                 gameWon = true;
+                stopTimer();
             }
             
             // Check lose condition
-            if (checkLoseCondition()) {
+            if (checkLoseCondition() && !gameLost) {
                 gameLost = true;
+                stopTimer();
             }
         }
         
@@ -635,8 +782,6 @@
                     matches.forEach(({ row, col }) => {
                         grid[row][col] = null;
                     });
-                    score += matches.length * 10;
-                    scoreDisplay.textContent = score;
                     
                     // Update shooter bubbles after clearing matches
                     updateShooterBubbles();
@@ -690,15 +835,28 @@
             }
         }
         
+        function updateRowAnimation() {
+            if (isAnimatingRows) {
+                // Smoothly slide rows down
+                rowAnimationOffset += 3; // Slide speed
+                
+                if (rowAnimationOffset >= 0) {
+                    rowAnimationOffset = 0;
+                    isAnimatingRows = false;
+                }
+            }
+        }
+        
         function gameLoop() {
             updateShootingBubble();
             updateFallingBubbles();
+            updateRowAnimation();
             draw();
             requestAnimationFrame(gameLoop);
         }
         
         canvas.addEventListener('mousemove', (e) => {
-            if (shootingBubble) return;
+            if (shootingBubble || !gameStarted) return;
             
             const rect = canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
@@ -717,7 +875,7 @@
         // Touch support for mobile
         canvas.addEventListener('touchmove', (e) => {
             e.preventDefault();
-            if (shootingBubble) return;
+            if (shootingBubble || !gameStarted) return;
             
             const rect = canvas.getBoundingClientRect();
             const touch = e.touches[0];
@@ -747,11 +905,31 @@
         });
         
         function handleShoot(clientX, clientY) {
-            if (gameWon || gameLost) return;
-            
             const rect = canvas.getBoundingClientRect();
             const mouseX = clientX - rect.left;
             const mouseY = clientY - rect.top;
+            
+            // Don't allow clicks if game hasn't started
+            if (!gameStarted) {
+                return;
+            }
+            
+            // If game won and name not entered, check for save button click
+            if (gameWon && !nameEntered) {
+                const buttonX = canvas.width / 2 - 100;
+                const buttonY = canvas.height / 2 + 70;
+                const buttonWidth = 200;
+                const buttonHeight = 45;
+                
+                if (mouseX >= buttonX && mouseX <= buttonX + buttonWidth &&
+                    mouseY >= buttonY && mouseY <= buttonY + buttonHeight) {
+                    nameEntered = true;
+                    saveToLeaderboard(playerName, elapsedTime);
+                    return;
+                }
+            }
+            
+            if (gameWon || gameLost) return;
             
             // Check if clicking on "Next" bubble area (bottom left)
             const nextBubbleX = 50;
@@ -804,6 +982,13 @@
         
         initGame();
         gameLoop();
+        
+        // Allow Enter key to start game from name input
+        document.getElementById('playerNameInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                startWithName();
+            }
+        });
     </script>
 </body>
 </html>
