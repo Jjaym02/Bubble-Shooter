@@ -79,6 +79,11 @@
             font-size: 14px;
             line-height: 1.6;
         }
+        
+        .canvas-container {
+            position: relative;
+            display: inline-block;
+        }
     </style>
 </head>
 <body>
@@ -88,7 +93,9 @@
             <div class="score">Score: <span id="score">0</span></div>
         </div>
         
-        <canvas id="gameCanvas" width="400" height="520"></canvas>
+        <div class="canvas-container">
+            <canvas id="gameCanvas" width="400" height="520"></canvas>
+        </div>
         
         <div class="controls">
             <button onclick="resetGame()">🔄 New Game</button>
@@ -96,7 +103,7 @@
         
         <div class="instructions">
             🖱️ <strong>Move mouse</strong> to aim | <strong>Click</strong> to shoot<br>
-            ⌨️ Press <strong>R</strong> to swap current and next bubble<br>
+            ⌨️ Press <strong>R</strong> or click the <strong>Next bubble</strong> to swap<br>
             💡 Match 3 or more bubbles of the same color to pop them!
         </div>
     </div>
@@ -341,6 +348,11 @@
                 return; // Don't draw shooter when game is lost
             }
             
+            // Draw aiming guide (dotted line)
+            if (!shootingBubble && currentBubble) {
+                drawAimingGuide();
+            }
+            
             ctx.save();
             ctx.translate(SHOOTER_X, SHOOTER_Y);
             ctx.rotate(angle);
@@ -371,6 +383,57 @@
                 ctx.fillText('Next:', 20, 470);
                 drawBubble(50, 490, nextBubble.color);
             }
+        }
+        
+        function drawAimingGuide() {
+            const velocityX = Math.sin(angle) * 8;
+            const velocityY = -Math.cos(angle) * 8;
+            
+            let x = SHOOTER_X;
+            let y = SHOOTER_Y;
+            let vx = velocityX;
+            let vy = velocityY;
+            
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+            
+            // Simulate trajectory
+            for (let i = 0; i < 100; i++) {
+                x += vx;
+                y += vy;
+                
+                // Wall bounces
+                if (x - BUBBLE_RADIUS < 0 || x + BUBBLE_RADIUS > canvas.width) {
+                    vx = -vx;
+                    x = x - BUBBLE_RADIUS < 0 ? BUBBLE_RADIUS : canvas.width - BUBBLE_RADIUS;
+                }
+                
+                // Stop at top or when hitting bubbles
+                if (y - BUBBLE_RADIUS <= 30 || checkCollisionAt(x, y)) {
+                    break;
+                }
+                
+                // Draw dots every few steps
+                if (i % 8 === 0) {
+                    ctx.beginPath();
+                    ctx.arc(x, y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+        
+        function checkCollisionAt(x, y) {
+            for (let row = 0; row < ROWS; row++) {
+                for (let col = 0; col < COLS; col++) {
+                    if (grid[row][col]) {
+                        const pos = gridToWorld(row, col);
+                        const dist = Math.sqrt((x - pos.x) ** 2 + (y - pos.y) ** 2);
+                        if (dist < BUBBLE_RADIUS * 2) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            return false;
         }
         
         function checkCollision(x, y) {
@@ -624,8 +687,26 @@
             angle = Math.max(minAngle, Math.min(maxAngle, newAngle));
         });
         
-        canvas.addEventListener('click', () => {
-            if (!currentBubble || shootingBubble || gameWon || gameLost) return;
+        canvas.addEventListener('click', (e) => {
+            if (gameWon || gameLost) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // Check if clicking on "Next" bubble area (bottom left)
+            const nextBubbleX = 50;
+            const nextBubbleY = 490;
+            const distToNext = Math.sqrt((mouseX - nextBubbleX) ** 2 + (mouseY - nextBubbleY) ** 2);
+            
+            if (distToNext < BUBBLE_RADIUS + 5 && !shootingBubble) {
+                // Swap bubbles
+                swapBubbles();
+                return;
+            }
+            
+            // Otherwise shoot
+            if (!currentBubble || shootingBubble) return;
             
             const velocityX = Math.sin(angle) * 8;
             const velocityY = -Math.cos(angle) * 8;
@@ -644,13 +725,19 @@
         
         // Add keyboard event for swapping bubbles
         document.addEventListener('keydown', (e) => {
-            if (e.key.toLowerCase() === 'r' && !shootingBubble && !gameWon && !gameLost) {
+            if (e.key.toLowerCase() === 'r') {
+                swapBubbles();
+            }
+        });
+        
+        function swapBubbles() {
+            if (!shootingBubble && !gameWon && !gameLost && currentBubble && nextBubble) {
                 // Swap current and next bubble
                 const temp = currentBubble;
                 currentBubble = nextBubble;
                 nextBubble = temp;
             }
-        });
+        }
         
         function resetGame() {
             initGame();
