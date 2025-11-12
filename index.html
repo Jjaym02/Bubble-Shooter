@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Bubble Shooter Game</title>
     <style>
         * {
@@ -18,29 +18,36 @@
             min-height: 100vh;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             font-family: Arial, sans-serif;
+            padding: 10px;
+            margin: 0;
         }
         
         .game-container {
             background: rgba(255, 255, 255, 0.95);
             border-radius: 20px;
-            padding: 30px;
+            padding: 20px;
             box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            max-width: 100%;
+            width: fit-content;
         }
         
         .header {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
         }
         
         h1 {
             color: #333;
-            font-size: 28px;
+            font-size: clamp(20px, 5vw, 28px);
+            margin: 0;
         }
         
         .score {
-            font-size: 24px;
+            font-size: clamp(18px, 4vw, 24px);
             color: #667eea;
             font-weight: bold;
         }
@@ -51,10 +58,13 @@
             border-radius: 10px;
             cursor: crosshair;
             background: #1a1a2e;
+            max-width: 100%;
+            height: auto;
+            touch-action: none;
         }
         
         .controls {
-            margin-top: 20px;
+            margin-top: 15px;
             text-align: center;
         }
         
@@ -64,9 +74,10 @@
             border: none;
             padding: 12px 24px;
             border-radius: 8px;
-            font-size: 16px;
+            font-size: clamp(14px, 3vw, 16px);
             cursor: pointer;
             transition: background 0.3s;
+            touch-action: manipulation;
         }
         
         button:hover {
@@ -76,13 +87,29 @@
         .instructions {
             margin-top: 15px;
             color: #666;
-            font-size: 14px;
+            font-size: clamp(12px, 2.5vw, 14px);
             line-height: 1.6;
         }
         
         .canvas-container {
             position: relative;
             display: inline-block;
+            max-width: 100%;
+        }
+        
+        @media (max-width: 480px) {
+            .game-container {
+                padding: 15px;
+                border-radius: 15px;
+            }
+            
+            canvas {
+                border-width: 3px;
+            }
+            
+            .instructions {
+                font-size: 11px;
+            }
         }
     </style>
 </head>
@@ -687,12 +714,44 @@
             angle = Math.max(minAngle, Math.min(maxAngle, newAngle));
         });
         
+        // Touch support for mobile
+        canvas.addEventListener('touchmove', (e) => {
+            e.preventDefault();
+            if (shootingBubble) return;
+            
+            const rect = canvas.getBoundingClientRect();
+            const touch = e.touches[0];
+            const mouseX = touch.clientX - rect.left;
+            const mouseY = touch.clientY - rect.top;
+            
+            const dx = mouseX - SHOOTER_X;
+            const dy = mouseY - SHOOTER_Y;
+            
+            let newAngle = Math.atan2(dx, -dy);
+            
+            const maxAngle = Math.PI * 0.7;
+            const minAngle = -Math.PI * 0.7;
+            angle = Math.max(minAngle, Math.min(maxAngle, newAngle));
+        });
+        
         canvas.addEventListener('click', (e) => {
+            handleShoot(e.clientX, e.clientY);
+        });
+        
+        canvas.addEventListener('touchend', (e) => {
+            e.preventDefault();
+            if (e.changedTouches.length > 0) {
+                const touch = e.changedTouches[0];
+                handleShoot(touch.clientX, touch.clientY);
+            }
+        });
+        
+        function handleShoot(clientX, clientY) {
             if (gameWon || gameLost) return;
             
             const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+            const mouseX = clientX - rect.left;
+            const mouseY = clientY - rect.top;
             
             // Check if clicking on "Next" bubble area (bottom left)
             const nextBubbleX = 50;
@@ -721,7 +780,7 @@
             
             currentBubble = nextBubble;
             nextBubble = { color: getRandomBubbleColor() };
-        });
+        }
         
         // Add keyboard event for swapping bubbles
         document.addEventListener('keydown', (e) => {
