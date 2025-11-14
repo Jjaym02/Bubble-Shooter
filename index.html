@@ -859,8 +859,11 @@
             if (shootingBubble || !gameStarted) return;
             
             const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const mouseX = (e.clientX - rect.left) * scaleX;
+            const mouseY = (e.clientY - rect.top) * scaleY;
             
             const dx = mouseX - SHOOTER_X;
             const dy = mouseY - SHOOTER_Y;
@@ -879,8 +882,11 @@
             
             const rect = canvas.getBoundingClientRect();
             const touch = e.touches[0];
-            const mouseX = touch.clientX - rect.left;
-            const mouseY = touch.clientY - rect.top;
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const mouseX = (touch.clientX - rect.left) * scaleX;
+            const mouseY = (touch.clientY - rect.top) * scaleY;
             
             const dx = mouseX - SHOOTER_X;
             const dy = mouseY - SHOOTER_Y;
@@ -904,10 +910,20 @@
             }
         });
         
+        // Prevent context menu on long press
+        canvas.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+        
         function handleShoot(clientX, clientY) {
             const rect = canvas.getBoundingClientRect();
-            const mouseX = clientX - rect.left;
-            const mouseY = clientY - rect.top;
+            
+            // Account for canvas scaling on mobile
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            const mouseX = (clientX - rect.left) * scaleX;
+            const mouseY = (clientY - rect.top) * scaleY;
             
             // Don't allow clicks if game hasn't started
             if (!gameStarted) {
@@ -936,8 +952,8 @@
             const nextBubbleY = 490;
             const distToNext = Math.sqrt((mouseX - nextBubbleX) ** 2 + (mouseY - nextBubbleY) ** 2);
             
-            if (distToNext < BUBBLE_RADIUS + 5 && !shootingBubble) {
-                // Swap bubbles
+            if (distToNext < BUBBLE_RADIUS + 10 && !shootingBubble) {
+                // Swap bubbles (increased hitbox for mobile)
                 swapBubbles();
                 return;
             }
